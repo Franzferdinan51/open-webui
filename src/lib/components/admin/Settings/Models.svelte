@@ -18,6 +18,7 @@
 	import { page } from '$app/stores';
 
 	import { getModels } from '$lib/apis';
+	import { getLMStudioModels, loadLMStudioModel, unloadLMStudioModel } from '$lib/apis/lmstudio';
 	import Search from '$lib/components/icons/Search.svelte';
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
 	import Switch from '$lib/components/common/Switch.svelte';
@@ -44,6 +45,8 @@
 	let modelsImportInputElement: HTMLInputElement;
 
 	let models = null;
+	let lmStudioModels = null;
+	let allModels = null;
 
 	let workspaceModels = null;
 	let baseModels = null;
@@ -54,20 +57,30 @@
 	let showConfigModal = false;
 	let showManageModal = false;
 
-	$: if (models) {
-		filteredModels = models
-			.filter((m) => searchValue === '' || m.name.toLowerCase().includes(searchValue.toLowerCase()))
+	$: if (allModels) {
+		filteredModels = allModels
+			.filter((m) => {
+				// Filter by search value
+				const matchesSearch = searchValue === '' || m.name.toLowerCase().includes(searchValue.toLowerCase());
+				
+				// Filter by provider
+				const matchesProvider = selectedProvider === 'all' || 
+					(selectedProvider === 'ollama' && m.provider !== 'lmstudio') ||
+					(selectedProvider === 'lmstudio' && m.provider === 'lmstudio');
+				
+				return matchesSearch && matchesProvider;
+			})
 			.sort((a, b) => {
-				// // Check if either model is inactive and push them to the bottom
-				// if ((a.is_active ?? true) !== (b.is_active ?? true)) {
-				// 	return (b.is_active ?? true) - (a.is_active ?? true);
-				// }
-				// If both models' active states are the same, sort alphabetically
+				// Sort by provider first, then alphabetically
+				if (a.provider !== b.provider) {
+					return a.provider.localeCompare(b.provider);
+				}
 				return a.name.localeCompare(b.name);
 			});
 	}
 
 	let searchValue = '';
+	let selectedProvider = 'all'; // 'all', 'ollama', 'lmstudio'
 
 	const downloadModels = async (models) => {
 		let blob = new Blob([JSON.stringify(models)], {
@@ -78,28 +91,55 @@
 
 	const init = async () => {
 		models = null;
+		lmStudioModels = null;
+		allModels = null;
 
-		workspaceModels = await getBaseModels(localStorage.token);
-		baseModels = await getModels(localStorage.token, null, true);
+		try {
+			// Load Ollama models
+			workspaceModels = await getBaseModels(localStorage.token);
+			baseModels = await getModels(localStorage.token, null, true);
 
-		models = baseModels.map((m) => {
-			const workspaceModel = workspaceModels.find((wm) => wm.id === m.id);
+			models = baseModels.map((m) => {
+				const workspaceModel = workspaceModels.find((wm) => wm.id === m.id);
 
-			if (workspaceModel) {
-				return {
-					...m,
-					...workspaceModel
-				};
-			} else {
-				return {
-					...m,
-					id: m.id,
-					name: m.name,
+				if (workspaceModel) {
+					return {
+						...m,
+						...workspaceModel,
+						provider: 'ollama'
+					};
+				} else {
+					return {
+						...m,
+						id: m.id,
+						name: m.name,
+						is_active: true,
+						provider: 'ollama'
+					};
+				}
+			});
 
-					is_active: true
-				};
+			// Load LM Studio models
+			try {
+				lmStudioModels = await getLMStudioModels(localStorage.token);
+				if (lmStudioModels) {
+					lmStudioModels = lmStudioModels.map((m) => ({
+						...m,
+						is_active: m.loaded ?? true,
+						provider: 'lmstudio'
+					}));
+				}
+			} catch (error) {
+				console.warn('Failed to load LM Studio models:', error);
+				lmStudioModels = [];
 			}
-		});
+
+			// Combine all models
+			allModels = [...(models || []), ...(lmStudioModels || [])];
+		} catch (error) {
+			console.error('Error loading models:', error);
+			allModels = [];
+		}
 	};
 
 	const upsertModelHandler = async (model) => {
@@ -138,6 +178,29 @@
 				$config?.features?.enable_direct_connections && ($settings?.directConnections ?? null)
 			)
 		);
+	};
+
+	const toggleLMStudioModelHandler = async (model) => {
+		try {
+			if (model.is_active) {
+				// Unload the model
+				await unloadLMStudioModel(localStorage.token, model.id);
+				toast.success($i18n.t('Model unloaded successfully'));
+			} else {
+				// Load the model
+				await loadLMStudioModel(localStorage.token, model.id);
+				toast.success($i18n.t('Model loaded successfully'));
+			}
+			
+			// Refresh the models list
+			await init();
+		} catch (error) {
+			console.error('Error toggling LM Studio model:', error);
+			toast.error($i18n.t('Failed to toggle model'));
+			
+			// Revert the state
+			model.is_active = !model.is_active;
+		}
 	};
 
 	const toggleModelHandler = async (model) => {
@@ -306,11 +369,23 @@
 						</div>
 					{/if}
 				</div>
+				
+				<!-- Provider Filter -->
+				<div class="flex items-center">
+					<select
+						bind:value={selectedProvider}
+						class="text-sm bg-transparent border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-1 outline-none"
+					>
+						<option value="all">{$i18n.t('All Providers')}</option>
+						<option value="ollama">Ollama</option>
+						<option value="lmstudio">LM Studio</option>
+					</select>
+				</div>
 			</div>
 		</div>
 
 		<div class=" my-2 mb-5" id="model-list">
-			{#if models.length > 0}
+			{#if allModels && allModels.length > 0}
 				{#each filteredModels as model, modelIdx (model.id)}
 					<div
 						class=" flex space-x-4 cursor-pointer w-full px-3 py-2 dark:hover:bg-white/5 hover:bg-black/5 rounded-lg transition {model
@@ -347,20 +422,31 @@
 											? model?.meta?.description
 											: model?.ollama?.digest
 												? `${model?.ollama?.digest} **(${model?.ollama?.modified_at})**`
-												: model.id
+												: model?.provider === 'lmstudio' && model?.path
+													? `LM Studio: ${model.path}`
+													: model.id
 									)}
 									className=" w-fit"
 									placement="top-start"
 								>
-									<div class="  font-semibold line-clamp-1">{model.name}</div>
+									<div class="flex items-center gap-2">
+										<div class="font-semibold line-clamp-1">{model.name}</div>
+										{#if model?.provider === 'lmstudio'}
+											<span class="text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-1.5 py-0.5 rounded-full">LM Studio</span>
+										{:else}
+											<span class="text-xs bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 px-1.5 py-0.5 rounded-full">Ollama</span>
+										{/if}
+									</div>
 								</Tooltip>
 								<div class=" text-xs overflow-hidden text-ellipsis line-clamp-1 text-gray-500">
 									<span class=" line-clamp-1">
 										{!!model?.meta?.description
 											? model?.meta?.description
-											: model?.ollama?.digest
-												? `${model.id} (${model?.ollama?.digest})`
-												: model.id}
+											: model?.provider === 'lmstudio'
+												? model?.path || model.id
+												: model?.ollama?.digest
+													? `${model.id} (${model?.ollama?.digest})`
+													: model.id}
 									</span>
 								</div>
 							</div>
@@ -430,12 +516,18 @@
 
 								<div class="ml-1">
 									<Tooltip
-										content={(model?.is_active ?? true) ? $i18n.t('Enabled') : $i18n.t('Disabled')}
+										content={model?.provider === 'lmstudio' 
+											? ((model?.is_active ?? true) ? $i18n.t('Loaded') : $i18n.t('Unloaded'))
+											: ((model?.is_active ?? true) ? $i18n.t('Enabled') : $i18n.t('Disabled'))}
 									>
 										<Switch
 											bind:state={model.is_active}
 											on:change={async () => {
-												toggleModelHandler(model);
+												if (model?.provider === 'lmstudio') {
+													await toggleLMStudioModelHandler(model);
+												} else {
+													await toggleModelHandler(model);
+												}
 											}}
 										/>
 									</Tooltip>

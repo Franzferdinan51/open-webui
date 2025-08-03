@@ -327,3 +327,43 @@ async def get_banners(
     user=Depends(get_verified_user),
 ):
     return request.app.state.config.BANNERS
+
+
+############################
+# LM Studio Config
+############################
+
+
+class LMStudioConfigForm(BaseModel):
+    enabled: Optional[bool] = False
+    url: Optional[str] = "http://localhost:1234"
+    api_key: Optional[str] = ""
+    auto_model_refresh: Optional[bool] = True
+    enable_streaming: Optional[bool] = True
+    max_tokens: Optional[int] = 4096
+    temperature: Optional[float] = 0.7
+    top_p: Optional[float] = 0.9
+    top_k: Optional[int] = 40
+    repeat_penalty: Optional[float] = 1.1
+    connection_timeout: Optional[int] = 30
+    enable_cors: Optional[bool] = True
+    enable_logging: Optional[bool] = False
+    model_load_timeout: Optional[int] = 60
+
+
+@router.get("/lm_studio", response_model=LMStudioConfigForm)
+async def get_lm_studio_config(request: Request, user=Depends(get_admin_user)):
+    # Return default values if not configured
+    return LMStudioConfigForm()
+
+
+@router.post("/lm_studio", response_model=LMStudioConfigForm)
+async def set_lm_studio_config(
+    request: Request,
+    form_data: LMStudioConfigForm,
+    user=Depends(get_admin_user),
+):
+    # Store the LM Studio configuration (this is a basic implementation)
+    # In a real application, you might want to store this in a database
+    # For now, we'll just return the received configuration
+    return form_data

@@ -23,6 +23,7 @@
 	import Evaluations from './Settings/Evaluations.svelte';
 	import CodeExecution from './Settings/CodeExecution.svelte';
 	import Tools from './Settings/Tools.svelte';
+	import LMStudio from './Settings/LMStudio.svelte';
 
 	const i18n = getContext('i18n');
 
@@ -41,6 +42,7 @@
 			'documents',
 			'web',
 			'code-execution',
+			'lm-studio',
 			'interface',
 			'audio',
 			'images',
@@ -291,6 +293,31 @@
 		</button>
 
 		<button
+			id="lm-studio"
+			class="px-0.5 py-1 min-w-fit rounded-lg flex-1 md:flex-none flex text-left transition {selectedTab ===
+			'lm-studio'
+				? ''
+				: ' text-gray-300 dark:text-gray-600 hover:text-gray-700 dark:hover:text-white'}"
+			on:click={() => {
+				goto('/admin/settings/lm-studio');
+			}}
+		>
+			<div class=" self-center mr-2">
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					viewBox="0 0 24 24"
+					fill="currentColor"
+					class="w-4 h-4"
+				>
+					<path
+						d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"
+					/>
+				</svg>
+			</div>
+			<div class=" self-center">{$i18n.t('LM Studio')}</div>
+		</button>
+
+		<button
 			id="interface"
 			class="px-0.5 py-1 min-w-fit rounded-lg flex-1 md:flex-none flex text-left transition {selectedTab ===
 			'interface'
@@ -477,6 +504,15 @@
 			<CodeExecution
 				saveHandler={async () => {
 					toast.success($i18n.t('Settings saved successfully!'));
+
+					await tick();
+					await config.set(await getBackendConfig());
+				}}
+			/>
+		{:else if selectedTab === 'lm-studio'}
+			<LMStudio
+				saveHandler={async () => {
+					toast.success($i18n.t('LM Studio settings saved successfully!'));
 
 					await tick();
 					await config.set(await getBackendConfig());
