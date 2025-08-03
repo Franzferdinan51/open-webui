@@ -23,6 +23,8 @@ Passionate about open-source AI? [Join our team →](https://careers.openwebui.c
 
 For more information, be sure to check out our [Open WebUI Documentation](https://docs.openwebui.com/).
 
+> **Note**: This fork includes LM Studio integration features developed with assistance from [Claude Code](https://claude.ai/code), Anthropic's AI-powered development assistant. See [LM_STUDIO_PR_PROPOSAL.md](./LM_STUDIO_PR_PROPOSAL.md) for detailed information about the LM Studio integration.
+
 ## Key Features of Open WebUI ⭐
 
 - 🚀 **Effortless Setup**: Install seamlessly using Docker or Kubernetes (kubectl, kustomize or helm) for a hassle-free experience with support for both `:ollama` and `:cuda` tagged images.
