@@ -132,5 +132,4 @@ JWT-based with support for multiple OAuth providers and local authentication.
 - Use proper authentication and authorization checks
 
 ## Database
-
 The application uses Peewee ORM with SQLite as default, supporting PostgreSQL and MySQL for production. Migrations are handled through a custom system in `internal/migrations/`.
